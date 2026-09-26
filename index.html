@@ -1,0 +1,763 @@
+<!DOCTYPE html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"> 
+    <title>🌸 Cute Multiplayer Maze Race 🌸</title> 
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script> 
+    <style> 
+        * {margin: 0; padding: 0; box-sizing: border-box; user-select: none; touch-action: manipulation; } 
+        body {
+            font-family: 'Comic Neue', 'Segoe UI', 'Comic Sans MS', cursive; 
+            background: linear-gradient(135deg, #ffe6f0 0%, #ffd9e6 50%, #ffe0f0 100%); 
+            color: #5a3e4a; 
+            min-height: 100vh; 
+            padding: 15px; 
+            position: relative; 
+            overflow-x: hidden; 
+        } 
+        
+        /* Password Gate Modal Overlay */ 
+        #authOverlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: rgba(255, 230, 240, 0.95); backdrop-filter: blur(8px); 
+            z-index: 100000; display: flex; align-items: center; justify-content: center; 
+        } 
+        .auth-card {
+            background: white; padding: 30px; border-radius: 25px; 
+            border: 3px solid #ffb7c5; box-shadow: 0 10px 30px rgba(255, 105, 180, 0.3); 
+            text-align: center; max-width: 360px; width: 90%; 
+        } 
+        .auth-card h3 {color: #b36b8a; margin-bottom: 8px; font-size: 20px; } 
+        .auth-card input {
+            width: 100%; padding: 12px; border-radius: 20px; border: 2px solid #ffc0d0; 
+            margin: 15px 0 10px 0; font-family: inherit; font-size: 15px; text-align: center; 
+            outline: none; text-transform: uppercase; 
+        } 
+        .auth-card button {
+            width: 100%; padding: 11px; border-radius: 20px; border: none; 
+            background: linear-gradient(135deg, #ffb7c5, #ff9eb5); color: white; 
+            font-weight: bold; font-size: 14px; cursor: pointer; transition: 0.2s; 
+        } 
+        .auth-card button:hover {transform: scale(1.02); } 
+        .auth-error {color: #e04b77; font-size: 13px; margin-top: 10px; display: none; font-weight: bold; } 
+        
+        .main-container {
+            display: flex; gap: 20px; max-width: 1600px; margin: 0 auto; 
+            position: relative; z-index: 1; height: calc(100vh - 30px); 
+        } 
+        .game-section {flex: 3; min-width: 0; height: 100%; transition: all 0.3s ease; display: flex; flex-direction: column; } 
+        .game-section.fullscreen {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+            z-index: 9999; background: rgba(255, 245, 250, 0.98); padding: 20px; 
+        } 
+        .game-wrapper {
+            background: rgba(255, 245, 250, 0.92); border-radius: 30px; padding: 15px; 
+            box-shadow: 0 15px 40px rgba(255, 105, 180, 0.25); backdrop-filter: blur(5px); 
+            border: 3px solid #ffb7c5; height: 100%; display: flex; flex-direction: column; 
+        } 
+        .game-container {
+            position: relative; border-radius: 20px; background: #fff5f8; flex: 1; 
+            display: flex; align-items: center; justify-content: center; overflow: hidden; 
+        } 
+        #board {
+            display: grid; gap: 1px; background-color: #ffd9e6; padding: 4px; 
+            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+        } 
+        .cell {position: relative; border-radius: 4px; display: flex; align-items: center; justify-content: center; } 
+        .wall {background: linear-gradient(135deg, #fbc4d5, #faaac0, #ffb7c9); border: 1px solid #ffdfe8; } 
+        .path {background: linear-gradient(135deg, #fff0f5, #ffe8f0); } 
+        .finish {background: radial-gradient(circle at 30% 30%, #ffd966, #ffb347, #ff9f4a); box-shadow: 0 0 15px rgba(255, 180, 70, 0.6); border: 1px solid #fff0b5; } 
+        .finish::after {content: '🎀'; font-size: min(16px, 2.5vw); } 
+        
+        .player {
+            position: absolute; width: 85%; height: 85%; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; z-index: 10; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2); font-size: 14px; transition: transform 0.08s ease-out; 
+        } 
+        .player1 { background: radial-gradient(circle at 35% 35%, #ffb6c1, #ff6b8b); } 
+        .player2 { background: radial-gradient(circle at 35% 35%, #a5d6ff, #6b9fff); } 
+        .player3 { background: radial-gradient(circle at 35% 35%, #b8f2b0, #7ec850); } 
+        .player4 { background: radial-gradient(circle at 35% 35%, #ffd966, #ffaa33); } 
+        
+        .controls-section {flex: 1; min-width: 280px; max-width: 350px; height: 100%; overflow-y: auto; } 
+        .info-panel {
+            background: rgba(255, 245, 250, 0.95); padding: 16px; border-radius: 25px; 
+            border: 2px solid #ffc0d0; box-shadow: 0 5px 15px rgba(255, 105, 180, 0.15); margin-bottom: 15px; 
+        } 
+        .status {
+            font-size: 13px; font-weight: bold; margin-bottom: 12px; padding: 8px; 
+            background: linear-gradient(135deg, #fff0f5, #ffe8f0); border-radius: 15px; 
+            text-align: center; color: #b36b8a; border: 1px solid #ffc0d0; 
+        } 
+        .mode-selector {display: flex; gap: 8px; margin-bottom: 12px; } 
+        .mode-btn, .fullscreen-btn, .start-game-btn, .reset-btn {
+            flex: 1; padding: 8px 12px; border: none; border-radius: 50px; cursor: pointer; 
+            font-weight: bold; background: #ffe4ec; color: #b36b8a; font-family: inherit; font-size: 12px; 
+        } 
+        .mode-btn.active, .fullscreen-btn, .start-game-btn {background: linear-gradient(135deg, #ffb7c5, #ff9eb5); color: white; } 
+        .fullscreen-btn { width: 100%; margin-bottom: 12px; } 
+        .panel-box {background: #fff0f5; padding: 10px; border-radius: 15px; margin-bottom: 10px; } 
+        .panel-box h4 { margin-bottom: 8px; color: #b36b8a; font-size: 12px; } 
+        .player-buttons { display: flex; gap: 6px; } 
+        .player-count-btn {
+            flex: 1; padding: 6px; background: #ffe4ec; border: 2px solid #ffc0d0; 
+            border-radius: 15px; cursor: pointer; font-weight: bold; font-family: inherit; font-size: 12px; 
+        } 
+        .player-count-btn.active {background: linear-gradient(135deg, #ffb7c5, #ff9eb5); color: white; border-color: #ff9eb5; } 
+        
+        .char-choice-row {display: flex; align-items: center; justify-content: space-between; margin: 6px 0; font-size: 12px; } 
+        .char-options {display: flex; gap: 4px; } 
+        .char-opt-btn {
+            background: #ffe4ec; border: 2px solid #ffc0d0; border-radius: 50%; width: 32px; height: 32px; 
+            font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s; 
+        } 
+        .char-opt-btn.active {background: linear-gradient(135deg, #ffb7c5, #ff9eb5); border-color: #ff6b8b; transform: scale(1.1); } 
+        
+        .level-info {display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 6px 12px; background: #fff0f5; border-radius: 15px; font-size: 13px; } 
+        .level-btn {padding: 4px 10px; background: linear-gradient(135deg, #ffb7c5, #ff9eb5); border: none; border-radius: 20px; color: white; cursor: pointer; font-size: 11px; } 
+        .level-btn:disabled { opacity: 0.4; cursor: not-allowed; } 
+        
+        .controls-info {font-size: 11px; margin-top: 10px; color: #b36b8a; background: #fff0f5; padding: 8px 12px; border-radius: 15px; line-height: 1.4; } 
+        .start-game-btn, .reset-btn { width: 100%; margin-top: 8px; padding: 10px; } 
+        .reset-btn { background: #ffd4e0; } 
+        
+        .connection-panel {background: rgba(255, 245, 250, 0.98); padding: 12px; border-radius: 20px; border: 2px solid #ffc0d0; margin-top: 10px; } 
+        .connection-panel input {width: 100%; padding: 8px; margin: 6px 0; background: #fff0f5; border: 2px solid #ffc0d0; border-radius: 20px; font-family: inherit; font-size: 12px; } 
+        .connection-panel button {width: 100%; padding: 8px; margin: 4px 0; background: linear-gradient(135deg, #ffb7c5, #ff9eb5); border: none; border-radius: 20px; color: white; cursor: pointer; font-weight: bold; font-family: inherit; font-size: 12px; } 
+        .link-box {background: #fff0f5; padding: 6px 10px; border-radius: 12px; margin: 6px 0; word-break: break-all; font-size: 10px; font-family: monospace; border: 1px solid #ffc0d0; } 
+
+        /* Touch Controls for Mobile Compatibility */
+        .mobile-controls {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .dpad {
+            display: grid;
+            grid-template-columns: repeat(3, 45px);
+            grid-template-rows: repeat(3, 45px);
+            gap: 5px;
+        }
+        .dpad-btn {
+            background: linear-gradient(135deg, #ffb7c5, #ff9eb5);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 8px rgba(255, 105, 180, 0.3);
+            cursor: pointer;
+        }
+        .dpad-btn:active { transform: scale(0.95); }
+
+        @media (max-width: 768px) {
+            body { padding: 8px; height: auto; } 
+            .main-container { flex-direction: column; height: auto; } 
+            .game-container { min-height: 45vh; } 
+            .controls-section { max-width: none; width: 100%; } 
+            .mobile-controls { display: flex; }
+        } 
+    </style> 
+</head> 
+<body> 
+    <!-- Private Access Lock Screen --> 
+    <div id="authOverlay"> 
+        <div class="auth-card"> 
+            <h3>🔒 Secret Friend Access</h3> 
+            <p style="font-size: 13px; color: #8c5d73;">Enter your group passcode to play:</p> 
+            <input type="text" id="passcodeInput" placeholder="ENTER CODE" autocomplete="off" autocapitalize="characters" autofocus> 
+            <button onclick="checkAccess()">✨ Enter Game ✨</button> 
+            <div id="authError" class="auth-error">❌ Incorrect passcode! Try again.</div> 
+        </div> 
+    </div> 
+
+    <div class="main-container"> 
+        <div class="game-section" id="gameSection"> 
+            <div class="game-wrapper"> 
+                <div class="game-container" id="gameContainer"> 
+                    <div id="board"></div> 
+                </div> 
+                <!-- On-screen D-Pad for Mobile Compatibility -->
+                <div class="mobile-controls">
+                    <div class="dpad">
+                        <div></div>
+                        <button class="dpad-btn" onclick="handleMobileMove(0, -1)">▲</button>
+                        <div></div>
+                        <button class="dpad-btn" onclick="handleMobileMove(-1, 0)">◀</button>
+                        <div></div>
+                        <button class="dpad-btn" onclick="handleMobileMove(1, 0)">▶</button>
+                        <div></div>
+                        <button class="dpad-btn" onclick="handleMobileMove(0, 1)">▼</button>
+                        <div></div>
+                    </div>
+                </div>
+            </div> 
+        </div> 
+        <div class="controls-section"> 
+            <div class="info-panel"> 
+                <div class="status" id="statusMsg">🎀 Game Ready! 🎀</div> 
+                <button class="fullscreen-btn" onclick="toggleGameFullscreen()">🎮 Fullscreen Maze</button> 
+                <div class="mode-selector"> 
+                    <button class="mode-btn active" onclick="setGameMode('local')">🏠 Local</button> 
+                    <button class="mode-btn" onclick="setGameMode('online')">🌐 Online</button> 
+                </div> 
+                <div class="panel-box"> 
+                    <h4>✨ Number of Players ✨</h4> 
+                    <div class="player-buttons"> 
+                        <button class="player-count-btn active" data-count="2">2</button> 
+                        <button class="player-count-btn" data-count="3">3</button> 
+                        <button class="player-count-btn" data-count="4">4</button> 
+                    </div> 
+                </div> 
+                <div class="panel-box"> 
+                    <h4>🐾 Select Animal Character 🐾</h4> 
+                    <div id="characterSelectContainer"></div> 
+                </div> 
+                <div class="level-info"> 
+                    <span>🌟 Level <span id="levelNum">1</span>/<span id="maxLevel">5</span></span> 
+                    <div> 
+                        <button class="level-btn" onclick="changeLevel(-1)" id="prevLevelBtn">◀</button> 
+                        <button class="level-btn" onclick="changeLevel(1)" id="nextLevelBtn">▶</button> 
+                    </div> 
+                </div> 
+                <div class="controls-info" id="controlsInfo"></div> 
+                <button class="start-game-btn" onclick="startGame()">🎀 START RACE! 🎀</button> 
+                <button class="reset-btn" onclick="resetGame()">🔄 Reset Game</button> 
+            </div> 
+            <div id="connectionPanel"></div> 
+        </div> 
+    </div> 
+
+    <script> 
+        const VALID_PASSWORDS = ["KTTRON", "MAFIA TIRTH", "RIKUO", "RAVI", "RANDOM"]; 
+
+        function checkAccess() {
+            const input = document.getElementById("passcodeInput"); 
+            const val = input.value.trim().toUpperCase(); 
+            const err = document.getElementById("authError"); 
+            if (VALID_PASSWORDS.includes(val)) {
+                sessionStorage.setItem("maze_authorized", "true"); 
+                document.getElementById("authOverlay").style.display = "none"; 
+                initGameSession(); 
+            } else {
+                err.style.display = "block"; 
+                input.value = ""; 
+                input.focus(); 
+            } 
+        } 
+
+        document.getElementById("passcodeInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") checkAccess(); 
+        }); 
+
+        const AVAILABLE_ANIMALS = [
+            { key: 'dog', name: 'Puppy', emoji: '🐶' }, 
+            { key: 'cat', name: 'Kitty', emoji: '🐱' }, 
+            { key: 'panda', name: 'Panda', emoji: '🐼' }, 
+            { key: 'fox', name: 'Foxxy', emoji: '🦊' } 
+        ]; 
+
+        const LEVELS = [
+            { name: "🌸 Garden Maze", scale: 0.65 }, 
+            { name: "🍭 Candy Trails", scale: 0.8 }, 
+            { name: "🎀 Rainbow Labyrinth", scale: 0.95 }, 
+            { name: "✨ Starry Palace", scale: 1.1 }, 
+            { name: "👑 Imperial Castle", scale: 1.25 } 
+        ]; 
+
+        let currentLevel = 0; 
+        let ROWS = 15; 
+        let COLS = 19; 
+        let mazeLayout = []; 
+        let SPAWN_POINT = { x: 1, y: 1 }; 
+        let END_POINT = { x: 1, y: 1 }; 
+        let gameMode = 'local'; 
+        let selectedPlayerCount = 2; 
+        let players = []; 
+        let gameActive = false; 
+        let gameStarted = false; 
+        let winner = null; 
+        let isGameFullscreen = false; 
+        let localPlayerId = 1; 
+        let peer = null; 
+        let connections = []; 
+        let playerAnimalSelections = { 1: 0, 2: 1, 3: 2, 4: 3 }; 
+
+        const playerControls = {
+            1: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }, 
+            2: { up: 'w', down: 's', left: 'a', right: 'd' }, 
+            3: { up: 'i', down: 'k', left: 'j', right: 'l' }, 
+            4: { up: 't', down: 'g', left: 'f', right: 'h' } 
+        }; 
+
+        function calculateScreenGrid() {
+            const container = document.getElementById('gameContainer'); 
+            const w = container.clientWidth || 320; 
+            const h = container.clientHeight || 320; 
+            const baseCell = Math.max(20, 28 / (LEVELS[currentLevel].scale || 1)); 
+            let c = Math.floor((w - 20) / baseCell); 
+            let r = Math.floor((h - 20) / baseCell); 
+            c = Math.max(11, c % 2 === 0 ? c - 1 : c); 
+            r = Math.max(11, r % 2 === 0 ? r - 1 : r); 
+            COLS = c; 
+            ROWS = r; 
+        } 
+
+        function generateGuaranteedMaze(r, c) {
+            let grid = Array.from({ length: r }, () => Array(c).fill(1)); 
+            function carve(x, y) {
+                grid[y][x] = 0; 
+                const directions = [[0, -2], [0, 2], [-2, 0], [2, 0]].sort(() => Math.random() - 0.5); 
+                for (let [dx, dy] of directions) {
+                    const nx = x + dx; 
+                    const ny = y + dy; 
+                    if (ny > 0 && ny < r - 1 && nx > 0 && nx < c - 1 && grid[ny][nx] === 1) {
+                        grid[y + dy / 2][x + dx / 2] = 0; 
+                        carve(nx, ny); 
+                    } 
+                } 
+            } 
+            carve(1, 1); 
+            SPAWN_POINT = { x: 1, y: 1 }; 
+            END_POINT = { x: c - 2, y: r - 2 }; 
+            grid[END_POINT.y][END_POINT.x] = 0; 
+            return grid; 
+        } 
+
+        function createBoard() {
+            const board = document.getElementById('board'); 
+            board.innerHTML = ''; 
+            const container = document.getElementById('gameContainer'); 
+            const availW = (container.clientWidth || 320) - 10; 
+            const availH = (container.clientHeight || 320) - 10; 
+            const cellSize = Math.max(10, Math.floor(Math.min(availW / COLS, availH / ROWS))); 
+            board.style.gridTemplateColumns = `repeat(${COLS}, ${cellSize}px)`; 
+            board.style.gridTemplateRows = `repeat(${ROWS}, ${cellSize}px)`; 
+
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = document.createElement('div'); 
+                    cell.className = 'cell'; 
+                    cell.dataset.x = x; 
+                    cell.dataset.y = y; 
+                    if (mazeLayout[y] && mazeLayout[y][x] === 1) cell.classList.add('wall'); 
+                    else cell.classList.add('path'); 
+                    if (x === END_POINT.x && y === END_POINT.y) cell.classList.add('finish'); 
+                    board.appendChild(cell); 
+                } 
+            } 
+        } 
+
+        function renderCharacterSelector() {
+            const container = document.getElementById('characterSelectContainer'); 
+            container.innerHTML = ''; 
+            const slots = gameMode === 'online' ? 1 : selectedPlayerCount; 
+            for (let i = 1; i <= slots; i++) {
+                const targetPlayerId = gameMode === 'online' ? localPlayerId : i; 
+                const row = document.createElement('div'); 
+                row.className = 'char-choice-row'; 
+                const label = document.createElement('span'); 
+                label.textContent = gameMode === 'online' ? 'Your Animal:' : `Player ${i}:`; 
+                row.appendChild(label); 
+                const opts = document.createElement('div'); 
+                opts.className = 'char-options'; 
+                AVAILABLE_ANIMALS.forEach((animal, animalIndex) => {
+                    const btn = document.createElement('button'); 
+                    btn.className = `char-opt-btn ${playerAnimalSelections[targetPlayerId] === animalIndex ? 'active' : ''}`; 
+                    btn.textContent = animal.emoji; 
+                    btn.title = animal.name; 
+                    btn.onclick = () => selectCharacter(targetPlayerId, animalIndex); 
+                    opts.appendChild(btn); 
+                }); 
+                row.appendChild(opts); 
+                container.appendChild(row); 
+            } 
+        } 
+
+        function selectCharacter(playerId, animalIndex) {
+            playerAnimalSelections[playerId] = animalIndex; 
+            renderCharacterSelector(); 
+            updatePlayerPositions(); 
+            updateControlsInfo(); 
+            if (gameMode === 'online' && connections.length > 0) {
+                connections.forEach(conn => conn.send({type: 'char_select', playerId: playerId, animalIndex: animalIndex })); 
+            } 
+        } 
+
+        function updatePlayerPositions() {
+            players.forEach(player => {
+                if (!player.active) return; 
+                let el = document.getElementById(`player-${player.id}`); 
+                const targetCell = document.querySelector(`.cell[data-x='${player.x}'][data-y='${player.y}']`); 
+                const chosenAnimal = AVAILABLE_ANIMALS[playerAnimalSelections[player.id]]; 
+                if (!el) {
+                    el = document.createElement('div'); 
+                    el.id = `player-${player.id}`; 
+                    el.className = `player player${player.id}`; 
+                    el.textContent = chosenAnimal.emoji; 
+                } else {
+                    el.textContent = chosenAnimal.emoji; 
+                } 
+                if (targetCell && el.parentElement !== targetCell) {
+                    targetCell.appendChild(el); 
+                } 
+            }); 
+        } 
+
+        function handleMobileMove(dx, dy) {
+            if (gameMode === 'local') movePlayer(1, dx, dy);
+            else movePlayer(localPlayerId, dx, dy);
+        }
+
+        function movePlayer(playerId, dx, dy) {
+            if (!gameActive || !gameStarted) return; 
+            const player = players.find(p => p.id === playerId); 
+            if (!player) return; 
+            const nx = player.x + dx; 
+            const ny = player.y + dy; 
+            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return; 
+            if (mazeLayout[ny][nx] === 1) return; 
+            player.x = nx; 
+            player.y = ny; 
+            updatePlayerPositions(); 
+            checkWin(player); 
+            if (gameMode === 'online' && playerId === localPlayerId) {
+                connections.forEach(conn => conn.send({ type: 'move', playerId, x: nx, y: ny })); 
+            } 
+        } 
+
+        function checkWin(player) {
+            if (!gameActive) return; 
+            if (player.x === END_POINT.x && player.y === END_POINT.y) {
+                winner = player; 
+                gameActive = false; 
+                const animal = AVAILABLE_ANIMALS[playerAnimalSelections[player.id]]; 
+                document.getElementById('statusMsg').innerHTML = `🎉 ${animal.emoji} Player ${player.id} (${animal.name}) Wins! 🎉`; 
+                
+                if (gameMode === 'online') {
+                    if (localPlayerId === 1) {
+                        connections.forEach(conn => conn.send({ type: 'win', winner: player.id }));
+                        if (currentLevel + 1 < LEVELS.length) {
+                            setTimeout(() => {
+                                changeLevel(1);
+                                startGame();
+                            }, 2000);
+                        } else {
+                            setTimeout(() => alert(`🏆🎀 ${animal.name} conquered all levels! 🎀🏆`), 300);
+                        }
+                    }
+                } else {
+                    if (currentLevel + 1 < LEVELS.length) {
+                        setTimeout(() => {
+                            if (confirm(`🎉 ${animal.name} won! Move to Level ${currentLevel + 2}?`)) {
+                                changeLevel(1); 
+                            } 
+                        }, 300); 
+                    } else {
+                        setTimeout(() => alert(`🏆🎀 ${animal.name} conquered all levels! 🎀🏆`), 300); 
+                    } 
+                }
+            } 
+        } 
+
+        function loadLevel(idx) {
+            currentLevel = idx; 
+            calculateScreenGrid(); 
+            mazeLayout = generateGuaranteedMaze(ROWS, COLS); 
+            document.getElementById('levelNum').textContent = currentLevel + 1; 
+            document.getElementById('maxLevel').textContent = LEVELS.length; 
+            document.getElementById('prevLevelBtn').disabled = currentLevel === 0; 
+            document.getElementById('nextLevelBtn').disabled = currentLevel === LEVELS.length - 1; 
+            document.querySelectorAll('.player').forEach(e => e.remove()); 
+            players.forEach(p => { 
+                p.x = SPAWN_POINT.x; 
+                p.y = SPAWN_POINT.y; 
+            }); 
+            createBoard(); 
+            updatePlayerPositions(); 
+            document.getElementById('statusMsg').innerHTML = `🌟 Level ${currentLevel + 1}: ${LEVELS[currentLevel].name}`; 
+            
+            if (gameMode === 'online' && localPlayerId === 1) {
+                connections.forEach(conn => conn.send({ 
+                    type: 'level', 
+                    level: currentLevel, 
+                    mazeLayout: mazeLayout, 
+                    rows: ROWS, 
+                    cols: COLS, 
+                    spawn: SPAWN_POINT, 
+                    end: END_POINT 
+                })); 
+            } 
+        } 
+
+        function changeLevel(delta) {
+            if (gameMode === 'online' && localPlayerId !== 1) {
+                alert('Only host can change levels!'); 
+                return; 
+            } 
+            const next = currentLevel + delta; 
+            if (next >= 0 && next < LEVELS.length) loadLevel(next); 
+        } 
+
+        function startGame() {
+            if (gameMode === 'online' && localPlayerId !== 1) {
+                alert('Only host can start the race!'); 
+                return; 
+            } 
+            gameActive = true; 
+            gameStarted = true; 
+            winner = null; 
+            players.forEach(p => { 
+                p.x = SPAWN_POINT.x; 
+                p.y = SPAWN_POINT.y; 
+            }); 
+            updatePlayerPositions(); 
+            document.getElementById('statusMsg').innerHTML = `🏁 Race Started! Go! 🏁`; 
+            if (gameMode === 'online') {
+                connections.forEach(conn => conn.send({
+                    type: 'start', 
+                    players: players.map(p => ({ id: p.id, x: p.x, y: p.y })), 
+                    selections: playerAnimalSelections 
+                })); 
+            } 
+        } 
+
+        function resetGame() {
+            loadLevel(currentLevel); 
+            startGame(); 
+            if (gameMode === 'online') {
+                connections.forEach(conn => conn.send({ type: 'reset' })); 
+            } 
+        } 
+
+        function toggleGameFullscreen() {
+            const s = document.getElementById('gameSection'); 
+            isGameFullscreen = !isGameFullscreen; 
+            s.classList.toggle('fullscreen', isGameFullscreen); 
+            setTimeout(() => {
+                calculateScreenGrid(); 
+                mazeLayout = generateGuaranteedMaze(ROWS, COLS); 
+                createBoard(); 
+                updatePlayerPositions(); 
+            }, 100); 
+        } 
+
+        function setPlayerCount(count) {
+            selectedPlayerCount = count; 
+            document.querySelectorAll('.player-count-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.count) === count); 
+            }); 
+            if (gameMode === 'local') initLocalMode(); 
+        } 
+
+        function updateControlsInfo() {
+            let controlsHtml = ''; 
+            for (let i = 1; i <= (gameMode === 'online' ? players.length : selectedPlayerCount); i++) {
+                const keys = i === 1 ? 'Arrow Keys / D-Pad' : i === 2 ? 'WASD' : i === 3 ? 'IJKL' : 'TFGH'; 
+                const animal = AVAILABLE_ANIMALS[playerAnimalSelections[i]]; 
+                controlsHtml += `🎮 ${animal.emoji} P${i} (${animal.name}): ${keys}<br>`; 
+            } 
+            document.getElementById('controlsInfo').innerHTML = controlsHtml; 
+        } 
+
+        function initLocalMode() {
+            players = []; 
+            for (let i = 1; i <= selectedPlayerCount; i++) {
+                players.push({ id: i, x: SPAWN_POINT.x, y: SPAWN_POINT.y, active: true }); 
+            } 
+            renderCharacterSelector(); 
+            updateControlsInfo(); 
+            loadLevel(currentLevel); 
+        } 
+
+        function initOnlineMode() {
+            const panel = document.getElementById('connectionPanel'); 
+            gameActive = false; 
+            gameStarted = false; 
+            localPlayerId = 1; 
+            players = [{ id: 1, x: SPAWN_POINT.x, y: SPAWN_POINT.y, active: true }]; 
+            if (peer) peer.destroy(); 
+            peer = new Peer(); 
+            peer.on('open', (id) => {
+                panel.innerHTML = ` 
+                    <div class="connection-panel"> 
+                        <strong>🎀 Private Room Link 🎀</strong> 
+                        <div class="link-box" id="inviteLink">${window.location.origin}${window.location.pathname}?join=${id}</div> 
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('inviteLink').textContent); alert('Link copied to clipboard!')">📋 Copy Private Link</button> 
+                        <input type="text" id="joinId" placeholder="Paste friend's Peer ID"> 
+                        <button onclick="joinGame()">🚀 Join Room</button> 
+                    </div> 
+                `; 
+                renderCharacterSelector(); 
+            }); 
+            peer.on('connection', (conn) => {
+                connections.push(conn); 
+                const newId = players.length + 1; 
+                players.push({ id: newId, x: SPAWN_POINT.x, y: SPAWN_POINT.y, active: true }); 
+                conn.on('open', () => {
+                    conn.send({
+                        type: 'init', 
+                        assignedId: newId, 
+                        players: players.map(p => ({ id: p.id, x: p.x, y: p.y })), 
+                        level: currentLevel, 
+                        mazeLayout: mazeLayout,
+                        rows: ROWS,
+                        cols: COLS,
+                        spawn: SPAWN_POINT,
+                        end: END_POINT,
+                        selections: playerAnimalSelections 
+                    }); 
+                }); 
+                setupPeerConnection(conn); 
+                updateControlsInfo(); 
+            }); 
+            loadLevel(0); 
+        } 
+
+        function setupPeerConnection(conn) {
+            conn.on('data', (data) => {
+                if (data.type === 'init') {
+                    localPlayerId = data.assignedId; 
+                    players = data.players.map(p => ({ ...p, active: true })); 
+                    playerAnimalSelections = data.selections || playerAnimalSelections; 
+                    currentLevel = data.level;
+                    mazeLayout = data.mazeLayout;
+                    ROWS = data.rows;
+                    COLS = data.cols;
+                    SPAWN_POINT = data.spawn;
+                    END_POINT = data.end;
+                    createBoard();
+                    renderCharacterSelector(); 
+                    updateControlsInfo(); 
+                } else if (data.type === 'move') {
+                    const p = players.find(pl => pl.id === data.playerId); 
+                    if (p) {
+                        p.x = data.x; 
+                        p.y = data.y; 
+                        updatePlayerPositions(); 
+                        checkWin(p); 
+                    } 
+                } else if (data.type === 'char_select') {
+                    playerAnimalSelections[data.playerId] = data.animalIndex; 
+                    updatePlayerPositions(); 
+                    updateControlsInfo(); 
+                } else if (data.type === 'start') {
+                    gameActive = true; 
+                    gameStarted = true; 
+                    winner = null; 
+                    if (data.selections) playerAnimalSelections = data.selections; 
+                    players.forEach(p => { 
+                        p.x = SPAWN_POINT.x; 
+                        p.y = SPAWN_POINT.y; 
+                    }); 
+                    updatePlayerPositions(); 
+                    document.getElementById('statusMsg').innerHTML = `🏁 Race Started! 🏁`; 
+                } else if (data.type === 'level') {
+                    currentLevel = data.level;
+                    mazeLayout = data.mazeLayout;
+                    ROWS = data.rows;
+                    COLS = data.cols;
+                    SPAWN_POINT = data.spawn;
+                    END_POINT = data.end;
+                    document.getElementById('levelNum').textContent = currentLevel + 1;
+                    document.getElementById('statusMsg').innerHTML = `🌟 Level ${currentLevel + 1}: ${LEVELS[currentLevel].name}`;
+                    createBoard();
+                    updatePlayerPositions();
+                } else if (data.type === 'win') {
+                    gameActive = false; 
+                    winner = { id: data.winner }; 
+                    const animal = AVAILABLE_ANIMALS[playerAnimalSelections[data.winner]]; 
+                    document.getElementById('statusMsg').innerHTML = `🎉 ${animal.emoji} Player ${data.winner} Wins! 🎉`; 
+                } else if (data.type === 'reset') {
+                    resetGame(); 
+                } 
+            }); 
+        } 
+
+        function joinGame() {
+            const joinId = document.getElementById('joinId').value.trim(); 
+            if (!joinId) return alert('Enter a Peer ID to connect!'); 
+            const conn = peer.connect(joinId); 
+            connections.push(conn); 
+            setupPeerConnection(conn); 
+        } 
+
+        function setGameMode(mode) {
+            gameMode = mode; 
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(mode))); 
+            if (mode === 'local') {
+                document.getElementById('connectionPanel').innerHTML = ''; 
+                initLocalMode(); 
+            } else {
+                initOnlineMode(); 
+            } 
+        } 
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isGameFullscreen) toggleGameFullscreen(); 
+            if (gameMode === 'local') {
+                for (let p = 1; p <= selectedPlayerCount; p++) {
+                    const c = playerControls[p]; 
+                    if (e.key === c.up) { e.preventDefault(); movePlayer(p, 0, -1); break; } 
+                    if (e.key === c.down) { e.preventDefault(); movePlayer(p, 0, 1); break; } 
+                    if (e.key === c.left) { e.preventDefault(); movePlayer(p, -1, 0); break; } 
+                    if (e.key === c.right) { e.preventDefault(); movePlayer(p, 1, 0); break; } 
+                } 
+            } else if (gameMode === 'online') {
+                if (e.key === 'ArrowUp') { e.preventDefault(); movePlayer(localPlayerId, 0, -1); } 
+                else if (e.key === 'ArrowDown') { e.preventDefault(); movePlayer(localPlayerId, 0, 1); } 
+                else if (e.key === 'ArrowLeft') { e.preventDefault(); movePlayer(localPlayerId, -1, 0); } 
+                else if (e.key === 'ArrowRight') { e.preventDefault(); movePlayer(localPlayerId, 1, 0); } 
+            } 
+        }); 
+
+        document.querySelectorAll('.player-count-btn').forEach(b => {
+            b.addEventListener('click', () => setPlayerCount(parseInt(b.dataset.count))); 
+        }); 
+
+        window.addEventListener('resize', () => {
+            if (gameMode === 'local' || (gameMode === 'online' && localPlayerId === 1)) {
+                calculateScreenGrid(); 
+                mazeLayout = generateGuaranteedMaze(ROWS, COLS); 
+                createBoard(); 
+                updatePlayerPositions(); 
+            }
+        }); 
+
+        function initGameSession() {
+            initLocalMode(); 
+            setTimeout(() => {
+                calculateScreenGrid(); 
+                mazeLayout = generateGuaranteedMaze(ROWS, COLS); 
+                createBoard(); 
+                updatePlayerPositions(); 
+            }, 50); 
+
+            const urlParams = new URLSearchParams(window.location.search); 
+            const joinParam = urlParams.get('join'); 
+            if (joinParam) {
+                setGameMode('online'); 
+                setTimeout(() => {
+                    const input = document.getElementById('joinId'); 
+                    if (input) {
+                        input.value = joinParam; 
+                        joinGame(); 
+                    } 
+                }, 1200); 
+            } 
+        } 
+
+        window.addEventListener('load', () => {
+            if (sessionStorage.getItem("maze_authorized") === "true") {
+                document.getElementById("authOverlay").style.display = "none"; 
+                initGameSession(); 
+            } 
+        }); 
+    </script> 
+</body> 
+</html>
